@@ -4,6 +4,7 @@ from PyQt5.QtGui import QTextDocument
 from PyQt5.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt5.QtWidgets import (
     QAction,
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -67,7 +68,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
 
-        # Верхняя панель
         top = QHBoxLayout()
         self.status_badge = QLabel("● Онлайн")
         self.status_badge.setStyleSheet("color: #1b7f37; font-weight: bold;")
@@ -79,7 +79,6 @@ class MainWindow(QMainWindow):
 
         top.addStretch()
 
-        # Поле для сканера штрих-кодов (вводит ID + Enter)
         self.barcode_edit = QLineEdit()
         self.barcode_edit.setPlaceholderText("Штрих-код / № заявки + Enter")
         self.barcode_edit.setFixedWidth(210)
@@ -95,9 +94,12 @@ class MainWindow(QMainWindow):
         sync_btn.clicked.connect(self._manual_sync)
         top.addWidget(sync_btn)
 
+        logout_btn = QPushButton("Выйти")
+        logout_btn.clicked.connect(self._logout)
+        top.addWidget(logout_btn)
+
         root.addLayout(top)
 
-        # Вкладки
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_requests_tab(), "Заявки")
         if self.role == "manager":
@@ -110,7 +112,6 @@ class MainWindow(QMainWindow):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # Панель фильтров и действий (живой поиск без кнопки "Найти")
         bar = QHBoxLayout()
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Поиск по №, технике, клиенту, мастеру...")
@@ -142,7 +143,6 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(bar)
 
-        # Таблица заявок
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(
             ["№", "Дата", "Тип техники", "Модель", "Проблема", "Статус", "Заказчик", "Мастер"]
@@ -205,7 +205,14 @@ class MainWindow(QMainWindow):
     def _on_search_changed(self) -> None:
         self.search_timer.start()
 
-    # --- Системный трей и нативные уведомления ---
+    def _logout(self) -> None:
+        self.sync_timer.stop()
+        self.api.logout()
+        self._force_quit = True
+        self.tray.hide()
+        self.close()
+        QApplication.exit(1000)
+
     def _setup_tray(self) -> None:
         self.tray = QSystemTrayIcon(self)
         icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
@@ -216,9 +223,12 @@ class MainWindow(QMainWindow):
         menu = QMenu()
         show_act = QAction("Открыть окно", self)
         show_act.triggered.connect(self._restore_from_tray)
+        logout_act = QAction("Выйти из аккаунта", self)
+        logout_act.triggered.connect(self._logout)
         quit_act = QAction("Выход", self)
         quit_act.triggered.connect(self._quit_app)
         menu.addAction(show_act)
+        menu.addAction(logout_act)
         menu.addSeparator()
         menu.addAction(quit_act)
 
@@ -238,6 +248,7 @@ class MainWindow(QMainWindow):
         self._force_quit = True
         self.tray.hide()
         self.close()
+        QApplication.quit()
 
     def closeEvent(self, event) -> None:
         if not self._force_quit and self.tray.isVisible():
@@ -252,7 +263,6 @@ class MainWindow(QMainWindow):
         else:
             event.accept()
 
-    # --- Фоновая синхронизация ---
     def _setup_sync_timer(self) -> None:
         interval_ms = int(self.settings.get("sync_interval_sec", 15)) * 1000
         self.sync_timer = QTimer(self)
@@ -302,7 +312,6 @@ class MainWindow(QMainWindow):
             self.status_badge.setStyleSheet("color: #c62828; font-weight: bold;")
         self.queue_badge.setText(f"В очереди: {queue_count}" if queue_count > 0 else "")
 
-    # --- Загрузка и отображение заявок ---
     def load_requests(self, silent: bool = False) -> None:
         q = self.search_edit.text().strip()
         status = self.status_filter.currentData() or ""
@@ -378,7 +387,6 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == RequestDialog.Accepted:
             self.load_requests()
 
-    # --- Импорт / экспорт CSV и Excel ---
     def _export_file(self) -> None:
         path, selected_filter = QFileDialog.getSaveFileName(
             self,
@@ -433,7 +441,6 @@ class MainWindow(QMainWindow):
         except (ApiError, Exception) as e:
             QMessageBox.critical(self, "Ошибка импорта", str(e))
 
-    # --- Отчёты и печать ---
     def load_stats(self) -> None:
         stats = self.api.get_stats(self.from_edit.text().strip(), self.to_edit.text().strip())
         if not stats:
@@ -474,7 +481,6 @@ class MainWindow(QMainWindow):
             doc.setHtml(build_report_print_html(self.last_stats, self.from_edit.text().strip(), self.to_edit.text().strip()))
             doc.print_(printer)
 
-    # --- Автозапуск ---
     def _toggle_autostart(self, checked: bool) -> None:
         ok, msg = set_autostart(checked)
         if ok:

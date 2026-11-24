@@ -1,6 +1,5 @@
 from __future__ import annotations
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -13,7 +12,7 @@ DB_FILE = APP_DIR / "cache.db"
 
 DEFAULT_SETTINGS = {
     "server_url": "http://192.168.0.15",
-    "sync_interval_sec": 15,
+    "sync_interval_sec": 3,
     "autostart": False,
 }
 
@@ -34,12 +33,10 @@ ROLE_LABELS = {
 TECH_TYPES = [
     "Компьютер",
     "Ноутбук",
+    "Клавиатура",
+    "Мышь",
+    "Монитор",
     "Принтер",
-    "Холодильник",
-    "Стиральная машина",
-    "Микроволновая печь",
-    "Телевизор",
-    "Кондиционер",
     "Другое",
 ]
 
@@ -63,7 +60,6 @@ def save_settings(data: dict) -> None:
 
 
 def set_autostart(enabled: bool) -> tuple[bool, str]:
-    """Включает или отключает автозапуск (Astra Linux .desktop / Windows реестр)."""
     main_script = Path(__file__).resolve().parent / "main.py"
     python_exe = sys.executable
 
